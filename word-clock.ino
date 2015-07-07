@@ -1,12 +1,17 @@
 #include "application.h"
 
+// Start up in SEMI_AUTOMATIC mode to be able to display
+// rainbows while trying to connect to wifi.
 SYSTEM_MODE(SEMI_AUTOMATIC);
 
+
+// NeoPixel init stuffs
 #include "neopixel.h"
-#define PIXEL_COUNT 130
+#define PIXEL_COUNT 121
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(PIXEL_COUNT, D0, WS2812B);
 
 
+// Timers
 #include "elapsedMillis.h"
 elapsedMillis timerEffect;
 uint32_t intervalEffect;
@@ -21,6 +26,7 @@ elapsedMillis timerUpdateTime = 0;
 static const uint32_t intervalUpdateTime = 86400000;
 
 
+// Function prototypes
 void doWord(const uint8_t *w);
 void undoWord(const uint8_t *w);
 void randomColor();
@@ -34,8 +40,12 @@ void displayDefaultText();
 void displayHour();
 void displayMinute();
 
+
+// Color holder
 uint8_t color[3] = {0, 0, 64};
 
+
+// Word pixels
 static const uint8_t wordIt[8] = {119, 120};
 static const uint8_t wordIs[8] = {116, 117};
 static const uint8_t wordHalf[8] = {114, 113, 112, 111};
@@ -87,6 +97,7 @@ bool time12Hour = false;
 bool resetFlag = false;
 elapsedMillis timerReset = 0;
 
+
 // Effect modes
 // 0 = no effect
 // 1 = rainbow
@@ -98,24 +109,32 @@ uint8_t LAST_MINUTE = 0;
 
 
 void setup() {
+    // Dim the onboard LED so it's less distracting
     RGB.control(true);
     RGB.brightness(128);
     RGB.control(false);
 
 
+    // Initialize NeoPixels
     strip.begin();
     strip.show();
 
-    // A little boot delay
+
+    // Connect to the cloud
     Spark.connect();
     while(!Spark.connected()) {
+        // And do a little rainbow dance while we wait
         rainbow(10);
         delay(10);
         Spark.process();
     }
 
+
+    // Set the timer to sync the time immediately
     timerUpdateTime = intervalUpdateTime;
 
+
+    // Do a "wipe" to clear away the rainbow
     for(uint8_t i=0; i<PIXEL_COUNT; i++) {
         strip.setPixelColor(i, strip.Color(255, 255, 255));
 
@@ -126,7 +145,10 @@ void setup() {
         delay(10);
     }
 
+
+    // Declare remote function
     Spark.function("function", fnRouter);
+
 
     // See if this EEPROM has saved data
     if(EEPROM.read(0)==117) {
@@ -173,16 +195,23 @@ void setup() {
         EEPROM.write(8, RAINBOW_DELAY);
     }
 
+    // Set the timezone
     Time.zone(timeZone);
 
+
+    // Blank slate
     blackOut();
     strip.show();
 }
 
 
 void loop() {
+    // Process effects
     doEffectMode();
 
+
+    // If we issued a remote reboot command, handle it after a small delay
+    // (It doesn't seem to work very well otherwise)
     if(timerReset>=500) {
         if(resetFlag) {
             System.reset();
@@ -192,16 +221,22 @@ void loop() {
         timerReset = 0;
     }
 
-    if(!Spark.connected() && timerConnect>=intervalEffect) {
+
+    // Try to connect to the cloud if we aren't connected, and
+    // we've waited for a reasonable delay
+    if(!Spark.connected() && timerConnect>=intervalConnect) {
         Spark.connect();
         delay(10);
         Spark.process();
 
         timerConnect = 0;
+
+    // If we're connected, handle background processes
     } else if(Spark.connected())
         Spark.process();
 
 
+    // If we're connected and waited long enough, sync the time
     if(Spark.connected() && timerUpdateTime>=intervalUpdateTime) {
         Spark.syncTime();
         timerUpdateTime = 0;
@@ -209,6 +244,7 @@ void loop() {
 }
 
 
+// Cloud API function
 int fnRouter(String command) {
     command.trim();
     command.toUpperCase();
@@ -320,9 +356,11 @@ int fnRouter(String command) {
         EEPROM.write(8, RAINBOW_DELAY);
         return RAINBOW_DELAY;
 
+
     // Get rainbow effect delay
     } else if(command.equals("GETRAINBOWDELAY")) {
         return RAINBOW_DELAY;
+
 
     // Turn on one pixel
     } else if(command.substring(0, 8)=="PIXELON,") {
@@ -332,6 +370,7 @@ int fnRouter(String command) {
 
         return pixel;
 
+
     // Turn off one pixel
     } else if(command.substring(0, 9)=="PIXELOFF,") {
         uint8_t pixel = command.substring(9).toInt();
@@ -339,6 +378,7 @@ int fnRouter(String command) {
         strip.show();
 
         return pixel;
+
 
     // Display a word
     } else if(command.substring(0,7)=="DOWORD,") {
@@ -448,6 +488,8 @@ int fnRouter(String command) {
         strip.show();
 
         return command.length()-9;
+
+    // Return the Unix epoch time as the clock knows it
     } else if(command.equals("GETTIME"))
         return Time.now();
 
@@ -456,6 +498,7 @@ int fnRouter(String command) {
 }
 
 
+// Generate a random color
 void randomColor() {
     color[0] = random(32, 255);
     color[1] = random(32, 255);
@@ -463,6 +506,7 @@ void randomColor() {
 }
 
 
+// Turn off all pixels
 void blackOut() {
     // Black it out
     for(uint8_t x=0; x<PIXEL_COUNT; x++)
@@ -470,18 +514,21 @@ void blackOut() {
 }
 
 
+// Display a word
 void doWord(const uint8_t *w) {
     for(uint8_t i=0; i<sizeof(w)*2; i++)
         strip.setPixelColor(w[i], strip.Color(color[0], color[1], color[2]));
 }
 
 
+// Turn off a word
 void undoWord(const uint8_t *w) {
     for(uint8_t i=0; i<sizeof(w)*2; i++)
         strip.setPixelColor(w[i], strip.Color(0, 0, 0));
 }
 
 
+// Display the rainbow
 void rainbow(uint8_t wait) {
     uint16_t i, j;
 
@@ -522,6 +569,7 @@ void doTime() {
 }
 
 
+// Display the words that are always displayed: "It is ... o'clock"
 void displayDefaultText() {
     // it
     doWord(wordIt);
@@ -534,6 +582,7 @@ void displayDefaultText() {
 }
 
 
+// Calculate and display the hour
 void displayHour() {
     uint8_t h = Time.hourFormat12();
     uint8_t m = Time.minute();
@@ -593,9 +642,11 @@ void displayHour() {
 }
 
 
- void displayMinute() {
+// Display the minute offset ("rounded" to 5-minute intervals)
+void displayMinute() {
     uint8_t m = Time.minute();
 
+    // Some times don't need "minutes" (half, quarter)
     bool isMinutes = true;
 
 
@@ -660,12 +711,18 @@ void displayHour() {
 }
 
 
+// Process the current effect mode
 void doEffectMode() {
+    // If the effect mode has changed since we last did an effect,
+    // wipe the slate.
     if(EFFECT_MODE!=LAST_EFFECT_MODE) {
         blackOut();
         LAST_EFFECT_MODE = EFFECT_MODE;
+        timerEffect = intervalEffect;
     }
 
+
+    // Update the effect if the appropriate interval has been reached
     if(timerEffect>=intervalEffect) {
         timerEffect = 0;
 
@@ -684,18 +741,26 @@ void doEffectMode() {
 }
 
 
+// The rainbow effect
 void doEffectRainbow() {
     uint16_t i, j;
 
+
+    // Wipe the slate if the minute has changed
     if(Time.minute()!=LAST_MINUTE) {
         blackOut();
         LAST_MINUTE = Time.minute();
     }
 
+
+    // "Display" the words
     displayDefaultText();
     displayHour();
     displayMinute();
 
+
+    // Loop through each pixel and give it a rainbow color if the pixel is
+    // displayed as part of a word.
     for(j=0; j<256; j++) {
         if(EFFECT_MODE!=1) break;
 
